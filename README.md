@@ -1,3 +1,7 @@
+
+## 🧩 AI-Triage POC Architecture
+
+```mermaid
 flowchart TD
     subgraph UI["💬 React Frontend (Vite)"]
         U1["AI Triage Chat UI"]

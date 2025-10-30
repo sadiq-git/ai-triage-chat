@@ -1,0 +1,76 @@
+# ============================================
+# 🐍 PYTHON / FASTAPI BACKEND
+# ============================================
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SQLite database and generated data
+triage.db
+*.sqlite3
+
+# Dummy / synthetic log data
+synthetic_bulk*.jsonl
+bulk_payload.json
+samples/
+tools/__pycache__/
+
+# Logs & cache
+*.log
+*.tmp
+.cache/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+
+# Environment / secrets
+.env
+.env.*
+!env.example
+secrets.json
+config.json
+
+# IDE / Editors
+.vscode/
+.idea/
+
+# ============================================
+# ⚛️ REACT FRONTEND (Vite: triage-chat)
+# ============================================
+
+triage-chat/node_modules/
+triage-chat/dist/
+triage-chat/.vite/
+triage-chat/.env
+triage-chat/*.local
+triage-chat/npm-debug.log*
+triage-chat/yarn-debug.log*
+triage-chat/yarn-error.log*
+triage-chat/*.tsbuildinfo
+
+# ============================================
+# 🧪 TESTS / TEMP
+# ============================================
+
+test-output/
+tmp/
+temp/
+*.bak
+*.old
+
+# ============================================
+# 💾 OS / SYSTEM
+# ============================================
+
+.DS_Store
+Thumbs.db
+desktop.ini
+*.stackdump
