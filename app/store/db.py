@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import uuid
+from typing import Optional, List, Dict, Any 
 
 # Prefer app.config.DB_PATH if present, else default to local file
 try:
@@ -206,7 +207,31 @@ def upsert_log_label(log_id: int, label: str) -> None:
         conn.commit()
     finally:
         conn.close()
-
+def fetch_logs_window(start_ts: Optional[str], end_ts: Optional[str], limit: int = 200) -> List[Dict[str, Any]]:
+    """
+    Return logs between start_ts and end_ts (inclusive).
+    - If start_ts is None: open-ended from earliest.
+    - If end_ts is None: open-ended to latest.
+    Timestamps are compared as strings (ISO-8601 expected, which your logs use).
+    """
+    conn = _connect()
+    try:
+        rows = _fetchall(
+            conn,
+            """
+            SELECT id, ts, level, message, correlation_id, endpoint
+            FROM logs
+            WHERE (? IS NULL OR ts >= ?)
+              AND (? IS NULL OR ts <= ?)
+            ORDER BY ts ASC
+            LIMIT ?
+            """,
+            (start_ts, start_ts, end_ts, end_ts, limit),
+        )
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+        
 def fetch_recent_logs(limit: int = 500) -> List[Dict[str, Any]]:
     """Return recent logs including label (needed by dynamic questioner)."""
     conn = _connect()

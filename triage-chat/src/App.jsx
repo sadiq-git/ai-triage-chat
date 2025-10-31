@@ -7,17 +7,19 @@ export default function App() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [geminiLoading, setGeminiLoading] = useState(false);
   const [summary, setSummary] = useState("");
   const [aiOk, setAiOk] = useState(null);
+  const [geminiOn, setGeminiOn] = useState(true); // toggle if you want
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // 🧩 Scroll to bottom on new messages
+  // auto-scroll on new messages
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 🩺 Gemini health check badge
+  // Gemini health badge
   useEffect(() => {
     const tick = async () => {
       try {
@@ -33,7 +35,7 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  // 🚀 Start a dynamic triage session
+  // Start a dynamic triage session
   useEffect(() => {
     const boot = async () => {
       try {
@@ -59,14 +61,15 @@ export default function App() {
     boot();
   }, []);
 
-  // 💬 Send user answer and fetch next question dynamically
   const send = async () => {
     if (!sessionId || !input.trim()) return;
     const userText = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", text: userText }]);
     setLoading(true);
+
     try {
+      // TRIAGE TURN
       const r = await fetch(`${API_BASE}/triage-dyn/${sessionId}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -85,17 +88,56 @@ export default function App() {
         },
       ]);
 
-      // 🧾 Automatically fetch AI summary once triage is finished
+      // If triage flow is effectively done, pull summary
       if (!data.question || data.step > 8) {
         const s = await fetch(`${API_BASE}/triage-dyn/${sessionId}/summary`);
         const text = await s.text();
         setSummary(text);
       }
+
+      // GEMINI TURN (free-form helper) — run AFTER triage turn
+      if (geminiOn) {
+        setGeminiLoading(true);
+        try {
+          const chatResp = await fetch(`${API_BASE}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: userText,
+              // Pass triage context so Gemini can be helpful
+              context: ctx,
+              session_id: sessionId,
+            }),
+          });
+
+          // Expect: { reply: "..." }
+          const chatData = await chatResp.json();
+          if (chatData?.reply) {
+            setMessages((prev) => [
+              ...prev,
+              { role: "gemini", text: chatData.reply },
+            ]);
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "system",
+                text:
+                  "Gemini did not return a reply. Check your GEMINI_API_KEY and /chat handler.",
+              },
+            ]);
+          }
+        } catch (err) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "system", text: `Gemini error: ${err}` },
+          ]);
+        } finally {
+          setGeminiLoading(false);
+        }
+      }
     } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "system", text: `Error: ${e}` },
-      ]);
+      setMessages((prev) => [...prev, { role: "system", text: `Error: ${e}` }]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -109,12 +151,17 @@ export default function App() {
     }
   };
 
-  // 🔎 Inline context hint block (POF, endpoint, etc.)
   const Hint = ({ context }) => {
     if (!context) return null;
     const { pof_timestamp, correlation_id, endpoint, pof_message, ai_label } =
       context;
-    if (!pof_timestamp && !correlation_id && !endpoint && !pof_message && !ai_label)
+    if (
+      !pof_timestamp &&
+      !correlation_id &&
+      !endpoint &&
+      !pof_message &&
+      !ai_label
+    )
       return null;
     return (
       <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
@@ -127,6 +174,18 @@ export default function App() {
     );
   };
 
+  const who = (role) =>
+    role === "user"
+      ? "You"
+      : role === "system"
+      ? "System"
+      : role === "gemini"
+      ? "Gemini"
+      : "Triage AI";
+
+  const whoColor = (role) =>
+    role === "user" ? "#2563eb" : role === "system" ? "#ef4444" : role === "gemini" ? "#0c7" : "#111827";
+
   return (
     <div
       style={{
@@ -137,31 +196,39 @@ export default function App() {
         position: "relative",
       }}
     >
-      {/* 🟢 Gemini Status Badge */}
+      {/* Status + Gemini toggle */}
       <div
         style={{
           position: "absolute",
           top: 12,
           right: 16,
+          display: "flex",
+          gap: 12,
           fontSize: 12,
-          fontWeight: 500,
+          alignItems: "center",
         }}
       >
-        Gemini:{" "}
-        <span
-          style={{
-            color: aiOk ? "green" : aiOk === false ? "red" : "#666",
-          }}
-        >
-          {aiOk ? "connected" : aiOk === false ? "offline" : "checking..."}
+        <span>
+          Gemini:{" "}
+          <span style={{ color: aiOk ? "green" : aiOk === false ? "red" : "#666" }}>
+            {aiOk ? "connected" : aiOk === false ? "offline" : "checking..."}
+          </span>
         </span>
+        <label style={{ userSelect: "none", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={geminiOn}
+            onChange={(e) => setGeminiOn(e.target.checked)}
+            style={{ marginRight: 6 }}
+          />
+          Ask Gemini
+        </label>
       </div>
 
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>
         AI Dynamic Triage Chat
       </h1>
 
-      {/* 💬 Chat Area */}
       <div
         style={{
           border: "1px solid #e5e7eb",
@@ -174,31 +241,19 @@ export default function App() {
       >
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: 12 }}>
-            <div
-              style={{
-                fontWeight: 600,
-                color:
-                  m.role === "user"
-                    ? "#2563eb"
-                    : m.role === "system"
-                    ? "#ef4444"
-                    : "#111827",
-              }}
-            >
-              {m.role === "user"
-                ? "You"
-                : m.role === "system"
-                ? "System"
-                : "Triage AI"}
+            <div style={{ fontWeight: 600, color: whoColor(m.role) }}>
+              {who(m.role)}
             </div>
             <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
             {m.role === "assistant" && <Hint context={m.context} />}
           </div>
         ))}
+        {geminiLoading && (
+          <div style={{ fontSize: 12, opacity: 0.7 }}>Gemini is thinking…</div>
+        )}
         <div ref={chatEndRef} />
       </div>
 
-      {/* 🧍 User Input */}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <textarea
           ref={inputRef}
@@ -233,7 +288,6 @@ export default function App() {
         </button>
       </div>
 
-      {/* 📄 AI Summary */}
       {summary && (
         <div
           style={{

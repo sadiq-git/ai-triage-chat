@@ -6,7 +6,7 @@ from uuid import uuid4
 from typing import Optional, Tuple
 from datetime import datetime, timedelta, timezone
 import re
-
+from fastapi import Query
 from app.store import db
 from app.services import analysis
 from app.services.questioner import propose_next_question
@@ -289,3 +289,23 @@ def summary_dyn(session_id: str):
 
     text = format_snow(summary_map, answers)
     return text
+@router.post("/{session_id}/window")
+def apply_window(session_id: str,
+                 start: Optional[str] = Query(None),
+                 end: Optional[str] = Query(None),
+                 limit: int = Query(200, ge=1, le=10000)):
+    """
+    Attach a time-window context to the session (doesn't change step count).
+    Returns summary so UI can show a hint block.
+    """
+    sess = db.get_session(session_id)
+    if not sess or sess.get("closed"):
+        return {"detail": "session not found or closed"}
+
+    result = analysis.summarize_window(start, end, limit)
+    # record a synthetic 'question' entry so it appears in the transcript
+    q = f"[Applied time window] start={start or '-'} end={end or '-'}"
+    db.add_answer(session_id, sess["step"], q, f"{len(result['logs'])} logs")
+
+    ctx = {"ai_summary": result.get("ai_summary"), "ai_label": result.get("ai_label")}
+    return {"session_id": session_id, "applied": {"start": start, "end": end, "limit": limit}, "context": ctx}
